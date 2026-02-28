@@ -11,15 +11,16 @@ struct ColorMatchChallengeView: View {
     @State private var completed = false
     @State private var timeRemaining: Double = 15
     @State private var hasGenerated = false
+    @State private var isActive = true
 
     private let requiredScore = 5
     let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
 
     private let palette: [(name: String, color: Color)] = [
-        ("CYAN", Color(red: 0.0, green: 0.85, blue: 1.0)),
-        ("AMBER", Color(red: 1.0, green: 0.65, blue: 0.0)),
-        ("VIOLET", Color(red: 0.6, green: 0.3, blue: 1.0)),
-        ("JADE", Color(red: 0.0, green: 0.85, blue: 0.5)),
+        ("COPPER", Theme.copper),
+        ("OLIVE", Theme.oliveLeaf),
+        ("GOLD", Theme.lightCaramel),
+        ("FOREST", Theme.blackForest),
     ]
 
     struct ColorCircle: Identifiable {
@@ -34,7 +35,7 @@ struct ColorMatchChallengeView: View {
             ZStack {
                 // Background
                 RadialGradient(
-                    colors: [Theme.dangerAccent.opacity(0.12), Theme.background],
+                    colors: [Theme.dangerAccent.opacity(0.08), Theme.background],
                     center: .center,
                     startRadius: 0,
                     endRadius: 400
@@ -71,6 +72,7 @@ struct ColorMatchChallengeView: View {
                             ForEach(0..<requiredScore, id: \.self) { i in
                                 RoundedRectangle(cornerRadius: 2)
                                     .fill(i < score ? Theme.successAccent : Theme.textTertiary)
+                                    .frame(maxWidth: .infinity)
                                     .frame(height: 4)
                             }
                         }
@@ -121,9 +123,18 @@ struct ColorMatchChallengeView: View {
 
                 // Wrong flash
                 if wrongFlash {
-                    Color.red.opacity(0.15)
-                        .ignoresSafeArea()
-                        .transition(.opacity)
+                    ZStack {
+                        Theme.dangerAccent.opacity(0.2)
+                            .ignoresSafeArea()
+                        Text("WRONG COLOR")
+                            .font(.system(size: 16, weight: .bold, design: .monospaced))
+                            .tracking(4)
+                            .foregroundStyle(Theme.textPrimary)
+                            .shadow(color: .black.opacity(0.5), radius: 4)
+                    }
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+                    .zIndex(100)
                 }
 
                 // Completion overlay
@@ -138,22 +149,34 @@ struct ColorMatchChallengeView: View {
                             .foregroundStyle(Theme.successAccent)
                     }
                     .transition(.scale.combined(with: .opacity))
+                    .zIndex(100)
+                }
+            }
+            .onChange(of: geo.size) { _, newSize in
+                if !hasGenerated, newSize.width > 0, newSize.height > 0 {
+                    targetColorIndex = Int.random(in: 0..<palette.count)
+                    generateCircles(in: newSize)
+                    hasGenerated = true
                 }
             }
             .onAppear {
+                isActive = true
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    if !hasGenerated {
+                    if !hasGenerated, geo.size.width > 0, geo.size.height > 0 {
                         targetColorIndex = Int.random(in: 0..<palette.count)
                         generateCircles(in: geo.size)
                         hasGenerated = true
                     }
                 }
             }
+            .onDisappear {
+                isActive = false
+                timer.upstream.connect().cancel()
+            }
             .onReceive(timer) { _ in
                 guard !completed else { return }
                 timeRemaining -= 0.1
                 if timeRemaining <= 0 {
-                    // Regenerate on timeout
                     regenerateCircles(in: geo.size)
                 }
             }
@@ -230,6 +253,7 @@ struct ColorMatchChallengeView: View {
                     completed = true
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    guard isActive else { return }
                     onComplete()
                 }
             }

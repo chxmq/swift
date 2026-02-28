@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Dismiss challenge — tap scattered numbers 1-6 in order to prove alertness
-struct DismissChallengeView: View {
+/// Sequence challenge — tap scattered nodes 1–6 in order to prove alertness
+struct SequenceChallengeView: View {
     let onComplete: () -> Void
 
     @State private var nodes: [ChallengeNode] = []
@@ -9,6 +9,7 @@ struct DismissChallengeView: View {
     @State private var wrongFlash = false
     @State private var completed = false
     @State private var hasGenerated = false
+    @State private var isActive = true
 
     struct ChallengeNode: Identifiable {
         let id: Int
@@ -19,16 +20,14 @@ struct DismissChallengeView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                // Danger background pulse
                 RadialGradient(
-                    colors: [Theme.dangerAccent.opacity(0.12), Theme.background],
+                    colors: [Theme.dangerAccent.opacity(0.08), Theme.background],
                     center: .center,
                     startRadius: 0,
                     endRadius: 400
                 )
                 .ignoresSafeArea()
 
-                // Header
                 VStack {
                     VStack(spacing: 8) {
                         Text("OVERRIDE REQUIRED")
@@ -41,7 +40,6 @@ struct DismissChallengeView: View {
                             .tracking(2)
                             .foregroundStyle(Theme.textSecondary)
 
-                        // Progress bar
                         HStack(spacing: 6) {
                             ForEach(1...6, id: \.self) { i in
                                 RoundedRectangle(cornerRadius: 2)
@@ -55,13 +53,11 @@ struct DismissChallengeView: View {
                     Spacer()
                 }
 
-                // Challenge nodes
                 ForEach(nodes) { node in
                     Button {
                         handleTap(node)
                     } label: {
                         ZStack {
-                            // Outer glow
                             Circle()
                                 .fill(
                                     node.isFound
@@ -70,7 +66,6 @@ struct DismissChallengeView: View {
                                 )
                                 .frame(width: 70, height: 70)
 
-                            // Border ring
                             Circle()
                                 .stroke(
                                     node.isFound ? Theme.successAccent : Theme.primaryAccent,
@@ -78,7 +73,6 @@ struct DismissChallengeView: View {
                                 )
                                 .frame(width: 56, height: 56)
 
-                            // Number
                             Text("\(node.id)")
                                 .font(.system(size: 24, weight: .bold, design: .monospaced))
                                 .foregroundStyle(
@@ -90,20 +84,21 @@ struct DismissChallengeView: View {
                     .position(node.position)
                 }
 
-                // Wrong tap flash
                 if wrongFlash {
-                    Color.red.opacity(0.15)
-                        .ignoresSafeArea()
-                        .transition(.opacity)
-
-                    Text("WRONG SEQUENCE")
-                        .font(.system(size: 14, weight: .bold, design: .monospaced))
-                        .tracking(4)
-                        .foregroundStyle(Theme.dangerAccent)
-                        .transition(.opacity)
+                    ZStack {
+                        Theme.dangerAccent.opacity(0.2)
+                            .ignoresSafeArea()
+                        Text("WRONG SEQUENCE")
+                            .font(.system(size: 16, weight: .bold, design: .monospaced))
+                            .tracking(4)
+                            .foregroundStyle(Theme.textPrimary)
+                            .shadow(color: .black.opacity(0.5), radius: 4)
+                    }
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+                    .zIndex(100)
                 }
 
-                // Completion overlay
                 if completed {
                     VStack(spacing: 12) {
                         Image(systemName: "checkmark.circle.fill")
@@ -115,26 +110,28 @@ struct DismissChallengeView: View {
                             .foregroundStyle(Theme.successAccent)
                     }
                     .transition(.scale.combined(with: .opacity))
+                    .zIndex(100)
                 }
             }
             .onChange(of: geo.size) { _, newSize in
-                if !hasGenerated {
+                if !hasGenerated, newSize.width > 0, newSize.height > 0 {
                     generateNodes(in: newSize)
                     hasGenerated = true
                 }
             }
             .onAppear {
+                isActive = true
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    if !hasGenerated {
+                    if !hasGenerated, geo.size.width > 0, geo.size.height > 0 {
                         generateNodes(in: geo.size)
                         hasGenerated = true
                     }
                 }
             }
+            .onDisappear { isActive = false }
         }
     }
 
-    // MARK: - Node generation with collision avoidance
     private func generateNodes(in size: CGSize) {
         let padding: CGFloat = 50
         let minY = size.height * 0.25
@@ -165,7 +162,6 @@ struct DismissChallengeView: View {
         sqrt(pow(a.x - b.x, 2) + pow(a.y - b.y, 2))
     }
 
-    // MARK: - Tap handling
     private func handleTap(_ node: ChallengeNode) {
         guard !completed else { return }
 
@@ -185,6 +181,7 @@ struct DismissChallengeView: View {
                     completed = true
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    guard isActive else { return }
                     onComplete()
                 }
             }

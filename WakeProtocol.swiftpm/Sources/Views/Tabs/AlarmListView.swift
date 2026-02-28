@@ -3,15 +3,11 @@ import SwiftUI
 /// Alarm list — clean Apple Clock-inspired layout
 struct AlarmListView: View {
     var store: AlarmStore
-    var onTestAlarm: (Alarm) -> Void
 
     @State private var showingAddSheet = false
     @State private var editingAlarm: Alarm?
     @State private var alarmToDelete: Alarm?
     @State private var showDeleteConfirm = false
-    @State private var currentTime = Date()
-
-    let clockTimer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     var body: some View {
         NavigationStack {
@@ -21,29 +17,52 @@ struct AlarmListView: View {
                 if store.alarms.isEmpty {
                     emptyState
                 } else {
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            // Next alarm header
-                            nextAlarmHeader
-                                .padding(.horizontal, 16)
-                                .padding(.bottom, 16)
-
-                            // Alarm rows
-                            VStack(spacing: 1) {
-                                ForEach(store.alarms) { alarm in
-                                    alarmRow(alarm)
-                                }
+                    VStack(spacing: 0) {
+                        // Fixed top: date + next alarm (live-updating via TimelineView)
+                        TimelineView(.periodic(from: Date(), by: 1.0)) { context in
+                            VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
+                                dateAndClockHeader(currentTime: context.date)
+                                    .padding(.horizontal, Theme.innerPadding)
+                                nextAlarmHeader(currentTime: context.date)
+                                    .padding(.horizontal, Theme.innerPadding)
                             }
-                            .background(Theme.surface)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            .padding(.horizontal, 16)
+                            .padding(.top, 12)
+                            .padding(.bottom, 16)
+                            .background(Theme.background)
                         }
-                        .padding(.top, 8)
-                        .padding(.bottom, 100)
+
+                        // Scrollable: only the alarm list (no pull-down bounce)
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("YOUR ALARMS")
+                                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(Theme.textSecondary)
+                                    .padding(.horizontal, 4)
+
+                                VStack(spacing: 1) {
+                                    ForEach(Array(store.alarms.enumerated()), id: \.element.id) { index, alarm in
+                                        alarmRow(alarm)
+                                            .transition(.opacity.combined(with: .move(edge: .leading)))
+                                    }
+                                }
+                                .background(Theme.surface)
+                                .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: Theme.cornerRadius)
+                                        .stroke(Theme.primaryAccent.opacity(0.12), lineWidth: 1)
+                                )
+                            }
+                            .padding(.horizontal, Theme.innerPadding)
+                            .padding(.bottom, 100)
+                        }
+                        .scrollBounceBehavior(.basedOnSize, axes: .vertical)
                     }
                 }
             }
             .navigationTitle("Alarms")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Theme.surfaceElevated, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -71,9 +90,16 @@ struct AlarmListView: View {
                 }
             }
             .sheet(item: $editingAlarm) { alarm in
-                AlarmEditView(alarm: alarm, isNew: false) { updated in
-                    store.update(updated)
-                }
+                AlarmEditView(
+                    alarm: alarm,
+                    isNew: false,
+                    onSave: { updated in store.update(updated) },
+                    onDelete: {
+                        if let idx = store.alarms.firstIndex(where: { $0.id == alarm.id }) {
+                            store.delete(at: IndexSet(integer: idx))
+                        }
+                    }
+                )
             }
             .alert("Delete Alarm?", isPresented: $showDeleteConfirm) {
                 Button("Delete", role: .destructive) {
@@ -86,15 +112,43 @@ struct AlarmListView: View {
             } message: {
                 Text("This alarm will be permanently removed.")
             }
-            .onReceive(clockTimer) { _ in
-                currentTime = Date()
-            }
         }
+    }
+
+    // MARK: - Date + Live Clock
+
+    private func dateAndClockHeader(currentTime: Date) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(todayDateString(from: currentTime))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Theme.textSecondary)
+                Text(liveTimeString(from: currentTime))
+                    .font(.system(size: 28, weight: .light, design: .rounded))
+                    .foregroundStyle(Theme.textPrimary)
+                    .monospacedDigit()
+            }
+            Spacer()
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func liveTimeString(from date: Date = Date()) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm a"
+        return f.string(from: date)
+    }
+
+    private func todayDateString(from date: Date = Date()) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "EEEE, MMM d"
+        return f.string(from: date)
     }
 
     // MARK: - Next Alarm Header
 
-    private var nextAlarmHeader: some View {
+    @ViewBuilder
+    private func nextAlarmHeader(currentTime: Date) -> some View {
         let nextAlarm = store.alarms
             .filter(\.isEnabled)
             .compactMap { alarm -> (Alarm, Date)? in
@@ -104,25 +158,18 @@ struct AlarmListView: View {
             .sorted { $0.1 < $1.1 }
             .first
 
-        return Group {
-            if let (alarm, fireDate) = nextAlarm {
-                VStack(spacing: 8) {
-                    Text(alarm.timeString)
-                        .font(.system(size: 52, weight: .ultraLight, design: .rounded))
-                        .foregroundStyle(.white)
-                        .monospacedDigit()
-
-                    HStack(spacing: 6) {
-                        Image(systemName: "alarm.fill")
-                            .font(.system(size: 11))
-                        Text(timeUntilString(fireDate))
-                            .font(.system(size: 13, weight: .medium))
-                    }
-                    .foregroundStyle(Theme.primaryAccent)
-                }
+        if let (alarm, fireDate) = nextAlarm {
+            NextAlarmHeaderView(alarm: alarm, fireDate: fireDate, currentTime: currentTime)
+        } else if !store.alarms.isEmpty {
+            Text("No upcoming alarm")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(Theme.textSecondary)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 24)
-            }
+                .padding(.vertical, 20)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.cornerRadiusLarge)
+                        .fill(Theme.surface)
+                )
         }
     }
 
@@ -137,7 +184,7 @@ struct AlarmListView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(alarm.timeString)
                         .font(.system(size: 42, weight: .light, design: .rounded))
-                        .foregroundStyle(alarm.isEnabled ? .white : Theme.textTertiary)
+                        .foregroundStyle(alarm.isEnabled ? Theme.textPrimary : Theme.textTertiary)
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
@@ -156,27 +203,14 @@ struct AlarmListView: View {
                             Text(alarm.repeatDescription)
                         }
                     }
-                    .font(.system(size: 13))
+                    .font(.system(size: 14))
                     .foregroundStyle(alarm.isEnabled ? Theme.textSecondary : Theme.textTertiary)
                 }
 
                 Spacer()
 
-                // Right side: test button + toggle
-                HStack(spacing: 12) {
-                    Button {
-                        onTestAlarm(alarm)
-                    } label: {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 9))
-                            .foregroundStyle(Theme.primaryAccent)
-                            .frame(width: 26, height: 26)
-                            .background(Theme.primaryAccent.opacity(0.12))
-                            .clipShape(Circle())
-                    }
-                    .accessibilityLabel("Test alarm")
-
-                    Toggle("", isOn: Binding(
+                // Right side: toggle
+                Toggle("", isOn: Binding(
                         get: { alarm.isEnabled },
                         set: { _ in
                             HapticsManager.shared.lightTap()
@@ -185,10 +219,9 @@ struct AlarmListView: View {
                     ))
                     .tint(Theme.primaryAccent)
                     .labelsHidden()
-                }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, Theme.innerPadding)
+            .padding(.vertical, 14)
             .background(Theme.surface)
         }
         .buttonStyle(.plain)
@@ -207,26 +240,39 @@ struct AlarmListView: View {
     // MARK: - Empty State
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: Theme.sectionSpacing) {
             Spacer()
 
-            Image(systemName: "alarm")
-                .font(.system(size: 44, weight: .ultraLight))
-                .foregroundStyle(Theme.textTertiary)
+            Image(systemName: "alarm.waves.left.and.right")
+                .font(.system(size: 48, weight: .light))
+                .foregroundStyle(Theme.primaryAccent.opacity(0.8))
+                .symbolEffect(.pulse, options: .repeating)
 
-            Text("No Alarms")
-                .font(.system(size: 22, weight: .medium))
-                .foregroundStyle(.white)
+            VStack(spacing: 8) {
+                Text("No alarms yet")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Theme.textPrimary)
 
-            Text("Tap + to add one")
-                .font(.system(size: 15))
-                .foregroundStyle(Theme.textTertiary)
+                Text("Tap the + button above to add your first alarm and start your wake protocol.")
+                    .font(.system(size: 15))
+                    .foregroundStyle(Theme.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(4)
+                    .padding(.horizontal, 32)
+            }
 
             Spacer()
         }
     }
 
-    // MARK: - Helpers
+}
+
+// MARK: - Next Alarm Header (animated)
+
+private struct NextAlarmHeaderView: View {
+    let alarm: Alarm
+    let fireDate: Date
+    let currentTime: Date
 
     private func timeUntilString(_ date: Date) -> String {
         let interval = date.timeIntervalSince(currentTime)
@@ -238,5 +284,82 @@ struct AlarmListView: View {
         } else {
             return "in \(minutes)m"
         }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // "Up next" label (centered)
+            HStack(spacing: 8) {
+                Image(systemName: "bell.badge.waveform.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.primaryAccent)
+                Text("UP NEXT")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .tracking(2)
+                    .foregroundStyle(Theme.primaryAccent)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 14)
+            .padding(.bottom, 4)
+
+            // Time + details (centered)
+            VStack(spacing: 14) {
+                Text(alarm.timeString)
+                    .font(.system(size: 48, weight: .ultraLight, design: .rounded))
+                    .foregroundStyle(Theme.textPrimary)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+
+                VStack(spacing: 6) {
+                    if !alarm.label.isEmpty {
+                        Text(alarm.label)
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(1)
+                            .multilineTextAlignment(.center)
+                    }
+                    if !alarm.repeatDays.isEmpty {
+                        Text(alarm.repeatDescription)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.textSecondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    HStack(spacing: 6) {
+                        Image(systemName: "clock")
+                            .font(.system(size: 11, weight: .medium))
+                        Text(timeUntilString(fireDate))
+                            .font(.system(size: 13, weight: .semibold))
+                            .contentTransition(.numericText())
+                    }
+                    .foregroundStyle(Theme.primaryAccent)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 20)
+            .padding(.horizontal, Theme.innerPadding)
+        }
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.cornerRadiusLarge)
+                .fill(Theme.surfaceElevated)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.cornerRadiusLarge)
+                        .stroke(Theme.primaryAccent.opacity(0.25), lineWidth: 1.5)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.cornerRadiusLarge)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Theme.primaryAccent.opacity(0.06),
+                                    Color.clear
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .allowsHitTesting(false)
+                )
+        )
     }
 }

@@ -10,9 +10,9 @@ final class NotificationManager {
     func requestPermission() {
         UNUserNotificationCenter.current().requestAuthorization(
             options: [.alert, .sound, .badge]
-        ) { granted, error in
-            if let error = error {
-                print("Notification permission error: \(error)")
+        ) { _, error in
+            if error != nil {
+                // Permission denied or error — user can enable in Settings
             }
         }
     }
@@ -24,8 +24,9 @@ final class NotificationManager {
         let content = UNMutableNotificationContent()
         content.title = "Wake Protocol"
         content.body = alarm.label.isEmpty ? "Time to wake up!" : alarm.label
-        content.sound = UNNotificationSound.defaultCritical
+        content.sound = UNNotificationSound.default
         content.categoryIdentifier = "ALARM"
+        // Time-sensitive: fires when screen is locked, can break through Focus (needs capability in Xcode)
         content.interruptionLevel = .timeSensitive
 
         if alarm.repeatDays.isEmpty {

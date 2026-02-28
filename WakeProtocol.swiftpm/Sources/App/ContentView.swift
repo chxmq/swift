@@ -3,15 +3,48 @@ import SwiftUI
 /// App entry point — onboarding or main app
 struct ContentView: View {
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
+    @State private var alarmStore = AlarmStore()
+    @State private var notificationTriggeredAlarm: Alarm?
 
     var body: some View {
-        if hasSeenOnboarding {
-            MainTabView()
-        } else {
-            OnboardingView {
-                withAnimation(.easeInOut(duration: 0.5)) {
-                    hasSeenOnboarding = true
+        ZStack {
+            if hasSeenOnboarding {
+                MainTabView(store: alarmStore)
+            } else {
+                OnboardingView {
+                    withAnimation(.easeInOut(duration: 0.5)) {
+                        hasSeenOnboarding = true
+                    }
                 }
+            }
+
+            if let alarm = notificationTriggeredAlarm {
+                AlarmFlowView(
+                    alarm: alarm,
+                    onDismiss: { notificationTriggeredAlarm = nil },
+                    onCancel: { notificationTriggeredAlarm = nil }
+                )
+                .transition(.opacity)
+                .zIndex(1)
+            }
+        }
+        .onAppear {
+            NotificationManager.shared.requestPermission()
+            // If app was launched from notification tap, show alarm now
+            if let alarmId = AppDelegate.pendingAlarmId {
+                AppDelegate.pendingAlarmId = nil
+                if let alarm = alarmStore.alarm(byId: alarmId) {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        notificationTriggeredAlarm = alarm
+                    }
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .alarmTriggered)) { notification in
+            guard let alarmId = notification.userInfo?["alarmId"] as? String,
+                  let alarm = alarmStore.alarm(byId: alarmId) else { return }
+            withAnimation(.easeInOut(duration: 0.3)) {
+                notificationTriggeredAlarm = alarm
             }
         }
     }
@@ -59,7 +92,7 @@ struct OnboardingView: View {
                         } label: {
                             Text("Skip")
                                 .font(.system(size: 14))
-                                .foregroundStyle(Theme.textTertiary)
+                                .foregroundStyle(Theme.textSecondary)
                         }
                     }
                 }
@@ -86,7 +119,7 @@ struct OnboardingView: View {
                     HStack(spacing: 8) {
                         ForEach(0..<pages.count, id: \.self) { index in
                             Capsule()
-                                .fill(index == currentPage ? pages[currentPage].color : Theme.textTertiary)
+                                .fill(index == currentPage ? pages[currentPage].color : Theme.textSecondary)
                                 .frame(width: index == currentPage ? 24 : 8, height: 8)
                                 .animation(.spring(response: 0.3), value: currentPage)
                         }
@@ -106,7 +139,7 @@ struct OnboardingView: View {
                         Text(currentPage < pages.count - 1 ? "NEXT" : "GET STARTED")
                             .font(.system(size: 14, weight: .bold, design: .monospaced))
                             .tracking(3)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Theme.textPrimary)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 18)
                             .background(
@@ -123,7 +156,7 @@ struct OnboardingView: View {
                 .padding(.bottom, 60)
             }
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(.light)
     }
 
     private func onboardingPage(_ page: (icon: String, title: String, subtitle: String, color: Color)) -> some View {
@@ -147,7 +180,7 @@ struct OnboardingView: View {
 
             Text(page.title)
                 .font(.system(size: 26, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.textPrimary)
 
             Text(page.subtitle)
                 .font(.system(size: 15))

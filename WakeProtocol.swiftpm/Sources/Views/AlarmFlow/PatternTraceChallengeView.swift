@@ -10,6 +10,7 @@ struct PatternTraceChallengeView: View {
     @State private var isTracing = false
     @State private var completed = false
     @State private var hasGenerated = false
+    @State private var isActive = true
 
     private let waypointCount = 5
     private let hitRadius: CGFloat = 35
@@ -19,7 +20,7 @@ struct PatternTraceChallengeView: View {
             ZStack {
                 // Background
                 RadialGradient(
-                    colors: [Theme.dangerAccent.opacity(0.12), Theme.background],
+                    colors: [Theme.dangerAccent.opacity(0.08), Theme.background],
                     center: .center,
                     startRadius: 0,
                     endRadius: 400
@@ -127,6 +128,34 @@ struct PatternTraceChallengeView: View {
                     .position(point)
                 }
 
+                // Reset button (when not completed)
+                if !completed, currentIndex > 0 {
+                    VStack {
+                        Spacer()
+                        Button {
+                            HapticsManager.shared.lightTap()
+                            withAnimation(.spring(response: 0.3)) {
+                                tracePoints = []
+                                currentIndex = 0
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.counterclockwise")
+                                    .font(.system(size: 12, weight: .semibold))
+                                Text("RESET")
+                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    .tracking(2)
+                            }
+                            .foregroundStyle(Theme.textSecondary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Theme.surface.opacity(0.8))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        .padding(.bottom, 100)
+                    }
+                }
+
                 // Completion overlay
                 if completed {
                     VStack(spacing: 12) {
@@ -139,6 +168,7 @@ struct PatternTraceChallengeView: View {
                             .foregroundStyle(Theme.successAccent)
                     }
                     .transition(.scale.combined(with: .opacity))
+                    .zIndex(100)
                 }
             }
             .gesture(
@@ -152,15 +182,24 @@ struct PatternTraceChallengeView: View {
                         checkWaypointHit(value.location)
                     }
             )
+            .onChange(of: geo.size) { _, newSize in
+                if !hasGenerated, newSize.width > 0, newSize.height > 0 {
+                    generateWaypoints(in: newSize)
+                    hasGenerated = true
+                    isTracing = true
+                }
+            }
             .onAppear {
+                isActive = true
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    if !hasGenerated {
+                    if !hasGenerated, geo.size.width > 0, geo.size.height > 0 {
                         generateWaypoints(in: geo.size)
                         hasGenerated = true
                         isTracing = true
                     }
                 }
             }
+            .onDisappear { isActive = false }
         }
         .accessibilityLabel("Pattern trace challenge. Drag your finger through all numbered nodes in order.")
     }
@@ -203,6 +242,7 @@ struct PatternTraceChallengeView: View {
                     completed = true
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    guard isActive else { return }
                     onComplete()
                 }
             }

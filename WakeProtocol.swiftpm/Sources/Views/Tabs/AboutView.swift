@@ -22,11 +22,12 @@ struct AboutView: View {
                         // Credits
                         creditsSection
                     }
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, Theme.innerPadding)
                     .padding(.bottom, 40)
                 }
             }
             .navigationTitle("About")
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
 
@@ -60,15 +61,15 @@ struct AboutView: View {
                 Text("WAKE PROTOCOL")
                     .font(.system(size: 18, weight: .bold, design: .monospaced))
                     .tracking(4)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Theme.textPrimary)
 
-                Text("Swift Student Challenge 2025")
+                Text("Swift Student Challenge 2026")
                     .font(.system(size: 12))
-                    .foregroundStyle(Theme.textTertiary)
+                    .foregroundStyle(Theme.textSecondary)
 
                 Text("v1.0")
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(Theme.textTertiary.opacity(0.5))
+                    .foregroundStyle(Theme.textTertiary)
             }
         }
     }
@@ -82,7 +83,7 @@ struct AboutView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("I built Wake Protocol because I have a real problem with alarms.")
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Theme.textPrimary)
 
                 Text("Every morning, the same cycle — alarm rings, I tap dismiss without thinking, and I fall back asleep. I've tried louder sounds, multiple alarms, putting my phone across the room. Nothing worked.")
                     .font(.system(size: 14))
@@ -137,7 +138,7 @@ struct AboutView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Theme.textPrimary)
                 Text(desc)
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.textSecondary)
@@ -172,11 +173,11 @@ struct AboutView: View {
 
             VStack(spacing: 4) {
                 Text("No third-party dependencies")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Theme.textTertiary)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.textSecondary)
                 Text("100% Apple frameworks")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.textTertiary.opacity(0.6))
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textTertiary)
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 8)
@@ -207,6 +208,6 @@ struct AboutView: View {
         Text(title)
             .font(.system(size: 11, weight: .bold, design: .monospaced))
             .tracking(3)
-            .foregroundStyle(Theme.textTertiary)
+            .foregroundStyle(Theme.textSecondary)
     }
 }

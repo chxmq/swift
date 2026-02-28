@@ -36,7 +36,12 @@ struct ParticleView: View {
                 updateParticles(in: geo.size)
             }
             .onAppear {
-                initializeParticles(in: geo.size)
+                if geo.size.width > 0, geo.size.height > 0 {
+                    initializeParticles(in: geo.size)
+                }
+            }
+            .onDisappear {
+                timer.upstream.connect().cancel()
             }
         }
         .allowsHitTesting(false)
@@ -58,6 +63,10 @@ struct ParticleView: View {
     }
 
     private func updateParticles(in size: CGSize) {
+        if particles.isEmpty, size.width > 0, size.height > 0 {
+            initializeParticles(in: size)
+            return
+        }
         for i in particles.indices {
             particles[i].y -= particles[i].speed
             particles[i].x += particles[i].drift

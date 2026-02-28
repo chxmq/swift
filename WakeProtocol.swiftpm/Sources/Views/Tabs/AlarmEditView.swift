@@ -5,15 +5,18 @@ struct AlarmEditView: View {
     @State var alarm: Alarm
     let isNew: Bool
     let onSave: (Alarm) -> Void
+    var onDelete: (() -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
 
     @State private var selectedDate: Date
+    @State private var showDeleteConfirm = false
 
-    init(alarm: Alarm, isNew: Bool, onSave: @escaping (Alarm) -> Void) {
+    init(alarm: Alarm, isNew: Bool, onSave: @escaping (Alarm) -> Void, onDelete: (() -> Void)? = nil) {
         self._alarm = State(initialValue: alarm)
         self.isNew = isNew
         self.onSave = onSave
+        self.onDelete = onDelete
 
         // Create a date from the alarm's hour/minute
         var components = DateComponents()
@@ -53,8 +56,13 @@ struct AlarmEditView: View {
 
                         // Repeat days
                         repeatSection
+
+                        // Delete (edit only)
+                        if !isNew, onDelete != nil {
+                            deleteSection
+                        }
                     }
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, Theme.innerPadding)
                     .padding(.top, 20)
                     .padding(.bottom, 40)
                 }
@@ -78,6 +86,35 @@ struct AlarmEditView: View {
             }
         }
         .presentationDetents([.large])
+        .alert("Delete this alarm?", isPresented: $showDeleteConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) {
+                onDelete?()
+                dismiss()
+            }
+        } message: {
+            Text("This alarm will be removed. You can add it again anytime.")
+        }
+    }
+
+    // MARK: - Delete
+
+    private var deleteSection: some View {
+        Button {
+            HapticsManager.shared.lightTap()
+            showDeleteConfirm = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "trash")
+                    .font(.system(size: 16, weight: .medium))
+                Text("Delete Alarm")
+                    .font(.system(size: 16, weight: .semibold))
+            }
+            .foregroundStyle(Theme.dangerAccent)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+        }
+        .padding(.top, 8)
     }
 
     // MARK: - Time Picker
@@ -102,7 +139,7 @@ struct AlarmEditView: View {
 
             TextField("Alarm name", text: $alarm.label)
                 .font(.system(size: 16))
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.textPrimary)
                 .padding(14)
                 .background(Theme.surface)
                 .cornerRadius(10)
@@ -232,7 +269,7 @@ struct AlarmEditView: View {
                         Text(Alarm.dayNames[day].prefix(1).uppercased())
                             .font(.system(size: 13, weight: .semibold, design: .monospaced))
                             .frame(width: 38, height: 38)
-                            .foregroundStyle(isSelected ? .white : Theme.textTertiary)
+                            .foregroundStyle(isSelected ? Theme.textPrimary : Theme.textTertiary)
                             .background(
                                 Circle()
                                     .fill(isSelected ? Theme.primaryAccent.opacity(0.3) : Theme.surface)
@@ -262,8 +299,8 @@ struct AlarmEditView: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text(category)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Theme.textTertiary)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.textSecondary)
                         .padding(.leading, 4)
 
                     LazyVGrid(columns: columns, spacing: 6) {
@@ -279,7 +316,7 @@ struct AlarmEditView: View {
                                     Image(systemName: sound.icon)
                                         .font(.system(size: 16))
                                     Text(sound.name)
-                                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
                                         .lineLimit(1)
                                 }
                                 .frame(maxWidth: .infinity)
@@ -318,7 +355,7 @@ struct AlarmEditView: View {
         Text(title)
             .font(.system(size: 11, weight: .bold, design: .monospaced))
             .tracking(3)
-            .foregroundStyle(Theme.textTertiary)
+            .foregroundStyle(Theme.textSecondary)
     }
 
     private func saveAlarm() {

@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Core alarm experience — escalates through 3 visual phases until user must override
-struct AlarmDemoView: View {
+/// Active alarm screen — escalates through standby, warning, and critical phases until override
+struct AlarmView: View {
     let onTriggerChallenge: () -> Void
     var soundType: Int = 0
 
@@ -12,18 +12,18 @@ struct AlarmDemoView: View {
     @State private var shakeOffset: CGFloat = 0
     @State private var showOverride = false
     @State private var flashBorder = false
+    @State private var lastHapticStep = -1
 
     let timer = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
 
-    // MARK: - Alarm phases with escalating intensity
     enum AlarmPhase {
         case standby, warning, critical
 
         var color: Color {
             switch self {
-            case .standby: return Color(red: 0.0, green: 0.85, blue: 1.0)
-            case .warning:  return Color(red: 1.0, green: 0.65, blue: 0.0)
-            case .critical: return Color(red: 1.0, green: 0.15, blue: 0.15)
+            case .standby: return Theme.primaryAccent
+            case .warning:  return Theme.warningAccent
+            case .critical: return Theme.dangerAccent
             }
         }
         var label: String {
@@ -44,7 +44,6 @@ struct AlarmDemoView: View {
 
     var body: some View {
         ZStack {
-            // Phase-colored radial background
             RadialGradient(
                 colors: [phase.color.opacity(0.25), Theme.background],
                 center: .center,
@@ -53,14 +52,12 @@ struct AlarmDemoView: View {
             )
             .ignoresSafeArea()
 
-            // Floating particles
             ParticleView(
                 color: phase.color,
                 intensity: phase == .critical ? 1.0 : (phase == .warning ? 0.6 : 0.3)
             )
             .ignoresSafeArea()
 
-            // Expanding radar rings
             ForEach(0..<3, id: \.self) { i in
                 Circle()
                     .stroke(phase.color.opacity(0.25 - Double(i) * 0.07), lineWidth: 1.5)
@@ -68,9 +65,6 @@ struct AlarmDemoView: View {
                     .opacity(ringOpacity(index: i))
             }
 
-
-
-            // Flashing border in critical
             if phase == .critical {
                 RoundedRectangle(cornerRadius: 0)
                     .stroke(phase.color.opacity(flashBorder ? 0.6 : 0), lineWidth: 4)
@@ -78,13 +72,12 @@ struct AlarmDemoView: View {
             }
 
             VStack(spacing: 28) {
-                // Phase label
                 Text(phase.label)
                     .font(.system(size: 14, weight: .bold, design: .monospaced))
                     .tracking(8)
                     .foregroundStyle(phase.color)
+                    .zIndex(1)
 
-                // Central orb
                 ZStack {
                     Circle()
                         .fill(phase.color.opacity(0.08))
@@ -108,34 +101,34 @@ struct AlarmDemoView: View {
                         .frame(width: 90, height: 90)
                         .shadow(color: phase.color.opacity(0.7), radius: 30)
                 }
+                .zIndex(1)
 
-                // Current time
                 Text(currentTime())
                     .font(.system(size: 60, weight: .ultraLight, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Theme.textPrimary)
                     .monospacedDigit()
+                    .zIndex(1)
 
-                // Phase dots
                 HStack(spacing: 12) {
                     phaseDot(label: "LOW", active: true, color: Theme.primaryAccent)
                     phaseDot(label: "MED", active: phase != .standby, color: Theme.warningAccent)
                     phaseDot(label: "HIGH", active: phase == .critical, color: Theme.dangerAccent)
                 }
+                .zIndex(1)
 
-                // Override button
                 if showOverride {
-                    Button(action: {
+                    Button {
                         AlarmSoundManager.shared.stop()
                         timer.upstream.connect().cancel()
                         onTriggerChallenge()
-                    }) {
+                    } label: {
                         HStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.system(size: 14))
                             Text("OVERRIDE REQUIRED")
                                 .font(.system(size: 14, weight: .bold, design: .monospaced))
                         }
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Theme.textPrimary)
                         .padding(.horizontal, 28)
                         .padding(.vertical, 14)
                         .background(phase.color.opacity(0.25))
@@ -149,15 +142,19 @@ struct AlarmDemoView: View {
                 }
             }
             .offset(x: shakeOffset)
+            .zIndex(10)
         }
         .onReceive(timer) { _ in
             timeElapsed += 0.05
             updatePhase()
             updateAnimations()
         }
+        .onDisappear {
+            timer.upstream.connect().cancel()
+            AlarmSoundManager.shared.stop()
+        }
     }
 
-    // MARK: - Phase progression
     private func updatePhase() {
         let sound = AlarmSoundManager.SoundType(rawValue: soundType) ?? .radar
         if timeElapsed > 6 && phase != .critical {
@@ -176,7 +173,6 @@ struct AlarmDemoView: View {
         }
     }
 
-    // MARK: - Continuous animations driven by timer
     private func updateAnimations() {
         let speed = phase.pulseSpeed
         pulseAmount = 1.0 + CGFloat(0.08 * sin(timeElapsed * .pi * 2 / speed))
@@ -187,14 +183,16 @@ struct AlarmDemoView: View {
         if phase == .critical {
             shakeOffset = CGFloat.random(in: -3...3)
             flashBorder.toggle()
-            // Periodic haptic pulse every ~0.5s during critical
-            if Int(timeElapsed * 20) % 10 == 0 {
+            let step = Int(timeElapsed * 2)
+            if step != lastHapticStep {
+                lastHapticStep = step
                 HapticsManager.shared.rigidTap()
             }
         } else if phase == .warning {
             shakeOffset = 0
-            // Softer periodic pulse every ~1s during warning
-            if Int(timeElapsed * 20) % 20 == 0 {
+            let step = Int(timeElapsed)
+            if step != lastHapticStep {
+                lastHapticStep = step
                 HapticsManager.shared.lightTap()
             }
         } else {
@@ -207,20 +205,19 @@ struct AlarmDemoView: View {
         let clamped = base.truncatingRemainder(dividingBy: 1.0)
         return CGFloat(0.6 + clamped * 1.2)
     }
+
     private func ringOpacity(index: Int) -> Double {
         let base = ringCycle + Double(index) * 0.25
         let clamped = base.truncatingRemainder(dividingBy: 1.0)
         return 1.0 - clamped
     }
 
-    // MARK: - Helpers
     private func currentTime() -> String {
         let f = DateFormatter()
         f.dateFormat = "HH:mm"
         return f.string(from: Date())
     }
 
-    @ViewBuilder
     private func phaseDot(label: String, active: Bool, color: Color) -> some View {
         HStack(spacing: 4) {
             Circle()

@@ -183,9 +183,9 @@ final class AlarmSoundManager {
     /// Play a preview of a sound type (short burst)
     func preview(_ type: SoundType) {
         stop()
-
         let freqs = type.frequencies
-        playTone(frequencies: [freqs[0]], duration: 0.25, volume: 0.3)
+        guard let first = freqs.first else { return }
+        playTone(frequencies: [first], duration: 0.25, volume: 0.3)
     }
 
     /// Start playing an alarm sound on loop
@@ -238,14 +238,14 @@ final class AlarmSoundManager {
 
         let engine = AVAudioEngine()
         let sampleRate = engine.outputNode.outputFormat(forBus: 0).sampleRate
-        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1) else { return }
 
         var phases = Array(repeating: 0.0, count: frequencies.count)
 
         let source = AVAudioSourceNode(format: format) { _, _, frameCount, audioBufferList -> OSStatus in
             let bufferList = UnsafeMutableAudioBufferListPointer(audioBufferList)
-            let buffer = bufferList[0]
-            let ptr = buffer.mData!.assumingMemoryBound(to: Float.self)
+            guard !bufferList.isEmpty, let mData = bufferList[0].mData else { return noErr }
+            let ptr = mData.assumingMemoryBound(to: Float.self)
 
             for frame in 0..<Int(frameCount) {
                 var sample: Float = 0
@@ -287,15 +287,15 @@ final class AlarmSoundManager {
 
         let engine = AVAudioEngine()
         let sampleRate = engine.outputNode.outputFormat(forBus: 0).sampleRate
-        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1) else { return }
         let totalSamples = Int(sampleRate * duration)
         var sampleIndex = 0
         var phase = 0.0
 
         let source = AVAudioSourceNode(format: format) { _, _, frameCount, audioBufferList -> OSStatus in
             let bufferList = UnsafeMutableAudioBufferListPointer(audioBufferList)
-            let buffer = bufferList[0]
-            let ptr = buffer.mData!.assumingMemoryBound(to: Float.self)
+            guard !bufferList.isEmpty, let mData = bufferList[0].mData else { return noErr }
+            let ptr = mData.assumingMemoryBound(to: Float.self)
 
             for frame in 0..<Int(frameCount) {
                 let progress = Double(sampleIndex) / Double(totalSamples)

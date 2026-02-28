@@ -1,16 +1,16 @@
 import SwiftUI
 
-/// Alarm data model with UserDefaults persistence
+/// Alarm model with UserDefaults persistence
 struct Alarm: Identifiable, Codable, Equatable {
     var id = UUID()
     var hour: Int
     var minute: Int
-    var challengeType: Int // 0=sequence, 1=trace, 2=color
-    var intensity: Int // 0=gentle, 1=moderate, 2=intense
+    var challengeType: Int
+    var intensity: Int
     var isEnabled: Bool
     var label: String
-    var repeatDays: Set<Int> // 0=Sun, 1=Mon, etc. Empty = one-time
-    var soundType: Int = 0 // Maps to AlarmSoundManager.SoundType
+    var repeatDays: Set<Int>
+    var soundType: Int = 0
 
     var soundName: String {
         AlarmSoundManager.SoundType(rawValue: soundType)?.name ?? "Radar"
@@ -50,36 +50,27 @@ struct Alarm: Identifiable, Codable, Equatable {
         return repeatDays.sorted().map { Alarm.dayNames[$0] }.joined(separator: ", ")
     }
 
-    /// Next date this alarm will fire
     var nextFireDate: Date? {
         guard isEnabled else { return nil }
         let cal = Calendar.current
         let now = Date()
-
         var components = DateComponents()
         components.hour = hour
         components.minute = minute
         components.second = 0
 
         if repeatDays.isEmpty {
-            // One-time: find next occurrence of this time
-            guard let candidate = cal.nextDate(
-                after: now,
-                matching: components,
-                matchingPolicy: .nextTime
-            ) else { return nil }
+            guard let candidate = cal.nextDate(after: now, matching: components, matchingPolicy: .nextTime)
+            else { return nil }
             return candidate
         } else {
-            // Repeating: find the nearest matching weekday
             var nearest: Date?
             for day in repeatDays {
                 components.weekday = day + 1
-                if let candidate = cal.nextDate(
-                    after: now,
-                    matching: components,
-                    matchingPolicy: .nextTime
-                ) {
-                    if nearest == nil || candidate < nearest! {
+                if let candidate = cal.nextDate(after: now, matching: components, matchingPolicy: .nextTime) {
+                    if let existing = nearest {
+                        if candidate < existing { nearest = candidate }
+                    } else {
                         nearest = candidate
                     }
                 }
@@ -89,7 +80,7 @@ struct Alarm: Identifiable, Codable, Equatable {
     }
 }
 
-/// Observable alarm store with UserDefaults persistence
+/// Alarm store with UserDefaults persistence
 @Observable
 final class AlarmStore {
     var alarms: [Alarm] = []
@@ -99,15 +90,11 @@ final class AlarmStore {
     init() {
         load()
         if alarms.isEmpty {
-            // Start with one default alarm
             alarms = [
                 Alarm(
-                    hour: 7,
-                    minute: 0,
-                    challengeType: 0,
-                    intensity: 1,
-                    isEnabled: true,
-                    label: "Morning Wake Up",
+                    hour: 7, minute: 0,
+                    challengeType: 0, intensity: 1,
+                    isEnabled: true, label: "Morning Wake Up",
                     repeatDays: Set([1,2,3,4,5])
                 )
             ]
@@ -139,10 +126,14 @@ final class AlarmStore {
         }
     }
 
+    func alarm(byId idString: String) -> Alarm? {
+        guard let uuid = UUID(uuidString: idString) else { return nil }
+        return alarms.first { $0.id == uuid }
+    }
+
     private func save() {
-        if let data = try? JSONEncoder().encode(alarms) {
-            UserDefaults.standard.set(data, forKey: key)
-        }
+        guard let data = try? JSONEncoder().encode(alarms) else { return }
+        UserDefaults.standard.set(data, forKey: key)
         NotificationManager.shared.rescheduleAll(alarms)
     }
 

@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Routes to the selected dismiss challenge type
-struct ChallengeContainerView: View {
-    let challengeType: Int // 0 = sequence, 1 = trace, 2 = color
+/// Routes to the selected challenge type (sequence, trace, or color match)
+struct ChallengeRouterView: View {
+    let challengeType: Int
     let onComplete: () -> Void
 
     var body: some View {
@@ -12,7 +12,7 @@ struct ChallengeContainerView: View {
         case 2:
             ColorMatchChallengeView(onComplete: onComplete)
         default:
-            DismissChallengeView(onComplete: onComplete)
+            SequenceChallengeView(onComplete: onComplete)
         }
     }
 }
